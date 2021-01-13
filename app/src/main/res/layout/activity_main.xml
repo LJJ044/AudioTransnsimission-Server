@@ -6,6 +6,20 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <RadioButton
+        android:id="@+id/btn_back"
+        android:layout_width="25dp"
+        android:layout_height="20dp"
+        android:drawableRight="@mipmap/go_back"
+        android:paddingLeft="10dp"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:button="@null"
+        android:gravity="center"
+        android:layout_marginLeft="20dp"
+        android:layout_marginTop="10dp"
+        android:onClick="exit"/>
+
     <Button
         android:id="@+id/btn_open_wifi"
         android:layout_width="wrap_content"
