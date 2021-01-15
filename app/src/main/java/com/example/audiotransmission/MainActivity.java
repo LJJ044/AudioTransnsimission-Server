@@ -23,9 +23,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.RadioButton;
 import android.widget.Toast;
 
@@ -47,25 +49,25 @@ public class MainActivity extends AppCompatActivity {
     private WifiAdmin am;
     private static String Wifi_Scan_Result = "wifi_result_obtained";
     private WifiManager.LocalOnlyHotspotReservation mReservation;
-    String SSID = "OnePlus 7";
+    String SSID = "Device";
     String PASS = "12345678";
     private static final int PORT = 7879;
-    private static final int DEVFICE_CONNECTING = 1;
-    private static final int DEVFICE_CONNECTED = 2;
+    private static final int DEVICE_CONNECTING = 1;
+    private static final int DEVICE_CONNECTED = 2;
     private static final int MSG_RECEIVED = 3;
     private static final int MSG_SENDED = 4;
     private static final int MSG_RECEIVED_ERROR = 5;
     private static final int MSG_SENDED_ERROR = 6;
-    private ExecutorService mExecutor;
+    public ExecutorService mExecutor;
     private ListenerThread listenerThread;
-    private AudioReader audioReader;
-    private  AudioManager audioManager;
     private AudioRecorder audioRecorder;
+    private  AudioManager audioManager;
     private WifiApConnectReceiver wifiApConnectReceiver = null;
     private int voluimeMax;
     private Button btn_receveA;
     private RadioButton rb_exit;
     private Socket socket;
+    private boolean isConnected;
     private boolean hasPermission;
     @RequiresApi(api = Build.VERSION_CODES.M)
     @SuppressLint("WrongViewCast")
@@ -103,16 +105,16 @@ public class MainActivity extends AppCompatActivity {
         am.openWifi();
         am.startScan();
         if(!am.isConnected)
-        am.addNetwork(am.CreateWifiInfo("OnePlus 7","12345678",3));
+        am.addNetwork(am.CreateWifiInfo(SSID,PASS,3));
     }
     public void create_wifi_hotspot(View v){
-        setWifiHotSpotEnabled(true);
+        setWifiHotSpotEnabled(true);    //创建热点
     }
     private final BroadcastReceiver WifiReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
            if(!am.isConnected)
-                am.addNetwork(am.CreateWifiInfo("OnePlus 7","12345678",3));
+                am.addNetwork(am.CreateWifiInfo(SSID,PASS,3));
         }
     };
     // wifi热点开关
@@ -152,88 +154,42 @@ public class MainActivity extends AppCompatActivity {
                 },0);
                 return false;
             }
-            am.mWifiManager.startLocalOnlyHotspot(new WifiManager.LocalOnlyHotspotCallback() {
-                @Override
-                public void onStarted(WifiManager.LocalOnlyHotspotReservation reservation) {
-                    mReservation = reservation;
-                    String SSID = reservation.getWifiConfiguration().SSID;
-                    String PASS = reservation.getWifiConfiguration().preSharedKey;
-                  //  callbak.onConnected("", sid, pwd);
-                    Log.d("热点","SSID:"+SSID+" PASS:" +PASS);
-                }
+            try {
+                Method configMethod = am.mWifiManager.getClass().getMethod("setWifiApConfiguration", WifiConfiguration.class);
+                boolean isConfigured = (Boolean) configMethod.invoke(am.mWifiManager, config);
+                Method method = am.mWifiManager.getClass().getMethod("startSoftAp", WifiConfiguration.class);
+                return (Boolean) method.invoke(am.mWifiManager,enabled);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
 
-                @Override
-                public void onStopped() {
-                    mReservation = null;
-                }
-
-                @Override
-                public void onFailed(int reason) {
-                    Log.d("热点","wifi ap is failed to open");
-                  //  callbak.onConnected("wifi ap is failed to open", null, null);
-                }
-            }, new Handler());
-//            am.mWifiManager.setWifiApConfiguration(config);
-//            ConnectivityManager cm = (ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
 
         }
         return false;
     }
+    /**
+     * 打开移动网络
+     * @param enabled 是否打开
+     */
+    public void setMobileDataState(boolean enabled) {
+        TelephonyManager telephonyManager = (TelephonyManager) this.getSystemService(Context.TELEPHONY_SERVICE);
+        try {
+            Method setDataEnabled = telephonyManager.getClass().getDeclaredMethod("setDataEnabled",boolean.class);
+            if (null != setDataEnabled) {
+                setDataEnabled.invoke(telephonyManager, enabled);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
     @RequiresApi(api = Build.VERSION_CODES.M)
-    public void onStartAudioReceive(View v) {
+    public void onStartAudioSend(View v) {
         if(hasPermission) {
             btn_receveA.setEnabled(false);
             listenerThread = new ListenerThread(PORT, mHandler);
             mExecutor.execute(listenerThread);
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-
             String routeIp = getWifiApIpAddress();
             Toast.makeText(this, "本地路由IP: " + routeIp, Toast.LENGTH_SHORT).show();
-            if (routeIp == null)
-                routeIp = "192.168.43.1";
-            if (audioRecorder == null) {
-                audioRecorder = AudioRecorder.getInstance();
-                audioRecorder.createDefaultAudio();
-            }
-            if (audioRecorder.getStatus() != AudioRecorder.Status.STATUS_START) {
-                audioRecorder.startRecord();
-                String finalRouteIp = routeIp;
-
-                mExecutor.execute(() -> {
-                    byte[] buff = new byte[audioRecorder.bufferSizeInBytes];
-                    while (true) {
-                        int length = audioRecorder.audioRecord.read(buff, 0, audioRecorder.bufferSizeInBytes);
-                        Log.i("音频录制长度", buff.length + "");
-                        if (length != -1) {
-                            Socket socket =listenerThread.getSocket();
-                            ConnectThread connectThread = new ConnectThread(socket, mHandler);
-                            connectThread.setHasPermission(true);
-                            connectThread.setStream(buff);
-                            mExecutor.execute(connectThread);
-                        } else {
-                            break;
-                        }
-                    }
-                });
-            }
-            //String finalRouteIp = routeIp;
-            //服务端自己监听自己的socket
-/*        mExecutor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Socket socket = new Socket(finalRouteIp,PORT);
-                    ConnectThread connectThread = new ConnectThread(socket,mHandler);
-                    mExecutor.execute(connectThread);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        });*/
         }
     }
     public void SendToServer(View v){
@@ -269,7 +225,7 @@ public class MainActivity extends AppCompatActivity {
              }
          });
     }
-
+    //获取热点路由IP
     public String getWifiApIpAddress() {
         try {
             for (Enumeration<NetworkInterface> en = NetworkInterface
@@ -335,12 +291,38 @@ public class MainActivity extends AppCompatActivity {
         public void handleMessage(@NonNull Message msg) {
             super.handleMessage(msg);
             switch (msg.what){
-                case DEVFICE_CONNECTING:
+                case DEVICE_CONNECTING:
                     //Toast.makeText(MainActivity.this, "接收到客户端的连接 ："+(String) msg.obj, Toast.LENGTH_SHORT).show();
                     mExecutor.execute(new ConnectThread(listenerThread.getSocket(),mHandler));
                     break;
-                case DEVFICE_CONNECTED:
-                    Toast.makeText(MainActivity.this, "连接成功", Toast.LENGTH_SHORT).show();
+                case DEVICE_CONNECTED:
+                    if (audioRecorder == null) {
+                        audioRecorder = AudioRecorder.getInstance();
+                        audioRecorder.createDefaultAudio();
+                    }
+                    if (audioRecorder.getStatus() != AudioRecorder.Status.STATUS_START) {
+                        audioRecorder.startRecord();
+                        mExecutor.execute(() -> {
+                            byte[] buff = new byte[audioRecorder.bufferSizeInBytes];
+                            while (true) {
+                                int length = audioRecorder.audioRecord.read(buff, 0, audioRecorder.bufferSizeInBytes);
+                                Log.i("音频录制长度", buff.length + "");
+                                if (length != -1) {
+                                    Socket socket =listenerThread.getSocket();
+                                    ConnectThread connectThread = new ConnectThread(socket, mHandler);
+                                    connectThread.setHasPermission(true);
+                                    connectThread.setStream(buff);
+                                    mExecutor.execute(connectThread);
+                                } else {
+                                    break;
+                                }
+                            }
+                        });
+                    }
+                    if(!isConnected) {
+                        Toast.makeText(MainActivity.this, "连接成功", Toast.LENGTH_SHORT).show();
+                        isConnected = true;
+                    }
                     break;
                 case MSG_SENDED:
                   //  Toast.makeText(MainActivity.this, "发送数据 :"+(String) msg.obj, Toast.LENGTH_SHORT).show();
@@ -364,6 +346,8 @@ public class MainActivity extends AppCompatActivity {
         finish();
         android.os.Process.killProcess(android.os.Process.myPid());
     }
+
+
     @Override
     protected void onDestroy() {
         super.onDestroy();

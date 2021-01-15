@@ -8,16 +8,17 @@
 
     <RadioButton
         android:id="@+id/btn_back"
-        android:layout_width="25dp"
-        android:layout_height="20dp"
-        android:drawableRight="@mipmap/go_back"
-        android:paddingLeft="10dp"
+        android:layout_width="35dp"
+        android:layout_height="25dp"
+        android:drawableTop="@mipmap/go_back"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toTopOf="parent"
+        android:paddingTop="3dp"
         android:button="@null"
         android:gravity="center"
-        android:layout_marginLeft="20dp"
         android:layout_marginTop="10dp"
+        android:layout_marginLeft="20dp"
+        android:paddingRight="25dp"
         android:onClick="exit"/>
 
     <Button
@@ -40,14 +41,23 @@
         app:layout_constraintRight_toRightOf="parent"
         android:onClick="create_wifi_hotspot"/>
     <Button
-        android:id="@+id/btn_receveA"
+        android:id="@+id/btn_open_data"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="接收音频"
+        android:text="打开移动网络"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btn_open_hotspot"
         app:layout_constraintRight_toRightOf="parent"
-        android:onClick="onStartAudioReceive" />
+        android:onClick="create_wifi_hotspot"/>
+    <Button
+        android:id="@+id/btn_receveA"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="发送音频"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/btn_open_data"
+        app:layout_constraintRight_toRightOf="parent"
+        android:onClick="onStartAudioSend" />
     <Button
         android:id="@+id/btn_sendToS"
         android:layout_width="wrap_content"
@@ -56,7 +66,8 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btn_receveA"
         app:layout_constraintRight_toRightOf="parent"
-        android:onClick="SendToServer" />
+        android:onClick="SendToServer"
+        android:visibility="gone"/>
     <Button
         android:id="@+id/btn_sendToC"
         android:layout_width="wrap_content"
@@ -65,6 +76,7 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btn_sendToS"
         app:layout_constraintRight_toRightOf="parent"
-        android:onClick="SendToClient" />
+        android:onClick="SendToClient"
+        android:visibility="gone"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
