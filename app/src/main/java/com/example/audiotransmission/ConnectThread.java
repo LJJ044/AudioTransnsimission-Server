@@ -3,12 +3,19 @@ package com.example.audiotransmission;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Message;
+import android.text.TextUtils;
+import android.util.Base64;
 import android.util.Log;
+
+import com.google.gson.Gson;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 import static com.example.audiotransmission.AudioReader.audioReader;
 
@@ -17,6 +24,8 @@ public class ConnectThread implements Runnable{
     private Handler mHandler;
     private InputStream is;
     private OutputStream os;
+    private PrintWriter pw;
+    private Gson gson;
     private byte[] stream;
     private boolean hasPermission;
     private static final int DEVICE_CONNECTED = 2;
@@ -52,7 +61,7 @@ public class ConnectThread implements Runnable{
     public ConnectThread(Socket socket, Handler mHandler) {
         this.socket = socket;
         this.mHandler = mHandler;
-
+        gson = new Gson();
     }
     @Override
     public void run() {
@@ -65,32 +74,25 @@ public class ConnectThread implements Runnable{
 
         try{
             os =socket.getOutputStream();
+            pw = new PrintWriter(os);
             // is = socket.getInputStream();
             if(os != null && hasPermission) {
                 if (stream != null)
                     sendAudioBytes(stream);
-                // sendData(msg);
+                if(!TextUtils.isEmpty(msg))
+                 sendData(msg);
             }
-            // if(is != null) {
-            //  obtainAudio();
-            //obtainData();
-            // }
         }catch (IOException e){
             e.printStackTrace();
         }
     }
     private void sendData(String str){
-        try {
-            os.write(str.getBytes());
-            Message msg = Message.obtain();
-            msg.what = MSG_SENDED;
-            msg.obj = str;
-            mHandler.sendMessage(msg);
+        TransmissionBean transmissionBean = new TransmissionBean();
+        transmissionBean.contentType = 1;
+        transmissionBean.content = str;
+        pw.write(gson.toJson(transmissionBean,TransmissionBean.class));
+        pw.flush();
 
-        } catch (IOException e) {
-            e.printStackTrace();
-            mHandler.sendEmptyMessage(MSG_SENDED_ERROR);
-        }
     }
     private void obtainAudio(){
         audioReader.readAudio();
@@ -98,10 +100,10 @@ public class ConnectThread implements Runnable{
         int length;
         while (true){
             try {
-                Log.i("读取音频长度",buffer.length+"");
                 if((length = is.read(buffer)) <0)
                     break;
                 audioReader.audioTrack.write(buffer,0,length);
+                Log.i("读取音频长度",buffer.length+"");
             } catch (IOException e) {
                 e.printStackTrace();
                 mHandler.sendEmptyMessage(MSG_RECEIVED_ERROR);
@@ -131,11 +133,10 @@ public class ConnectThread implements Runnable{
 
     }
     private void sendAudioBytes(byte[] audioData){
-        try {
-            os.write(audioData);
-        } catch (IOException e) {
-            e.printStackTrace();
-            mHandler.sendEmptyMessage(MSG_SENDED_ERROR);
-        }
+        TransmissionBean transmissionBean = new TransmissionBean();
+        transmissionBean.contentType = 0;
+        transmissionBean.content = Base64.encodeToString(audioData,Base64.DEFAULT);
+        pw.write(gson.toJson(transmissionBean,TransmissionBean.class));
+        pw.flush();
     }
 }

@@ -25,6 +25,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -48,7 +49,6 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
     private WifiAdmin am;
     private static String Wifi_Scan_Result = "wifi_result_obtained";
-    private WifiManager.LocalOnlyHotspotReservation mReservation;
     String SSID = "Device";
     String PASS = "12345678";
     private static final int PORT = 7879;
@@ -62,19 +62,21 @@ public class MainActivity extends AppCompatActivity {
     private ListenerThread listenerThread;
     private AudioRecorder audioRecorder;
     private  AudioManager audioManager;
-    private WifiApConnectReceiver wifiApConnectReceiver = null;
     private int voluimeMax;
     private Button btn_receveA;
     private RadioButton rb_exit;
-    private Socket socket;
     private boolean isConnected;
     private boolean hasPermission;
-    @RequiresApi(api = Build.VERSION_CODES.M)
+    private MediaTransService mService;
+    private Intent mIntent;
     @SuppressLint("WrongViewCast")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        mService = new MediaTransService();
+        mIntent = new Intent(this,MediaTransService.class);
+        mService.start(this,mIntent);
         hasPermission = requestPermissions();
         am = new WifiAdmin(this);
         rb_exit = (RadioButton) findViewById(R.id.btn_back);
@@ -84,22 +86,29 @@ public class MainActivity extends AppCompatActivity {
         audioManager = (AudioManager) getApplicationContext().getSystemService(AUDIO_SERVICE);
         voluimeMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         Log.i("设备最大音量",voluimeMax+"");
-        //IntentFilter intentFilter = new IntentFilter();
-        //intentFilter.addAction(Wifi_Scan_Result);
-        //registerReceiver(WifiReceiver,new IntentFilter(Wifi_Scan_Result));
-    }
-    @RequiresApi(api = Build.VERSION_CODES.M)
-    private boolean requestPermissions(){
-        boolean hasPermission = checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED||
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED;
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("android.media.VOLUME_CHANGED_ACTION");
+        registerReceiver(CommonReceiver,intentFilter);
         if(hasPermission) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION
-                    , Manifest.permission.RECORD_AUDIO}, 0);
-        }else {
-            return true;
+            listenerThread = new ListenerThread(PORT, mHandler);
+            mExecutor.execute(listenerThread);
+            String routeIp = getWifiApIpAddress();
+            Toast.makeText(this, "本地路由IP: " + routeIp, Toast.LENGTH_SHORT).show();
         }
-        return false;
+    }
+    private boolean requestPermissions(){
+        if(Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
+            return true;
+            boolean hasPermission = checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ||
+                    checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED;
+            if (hasPermission) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION
+                        , Manifest.permission.RECORD_AUDIO}, 0);
+            } else {
+                return true;
+            }
+
+            return false;
     }
     public void connect_hotspot(View v){
         am.openWifi();
@@ -107,14 +116,26 @@ public class MainActivity extends AppCompatActivity {
         if(!am.isConnected)
         am.addNetwork(am.CreateWifiInfo(SSID,PASS,3));
     }
+    public void open_mobile_data(View v){
+        setMobileDataState(true);
+    }
     public void create_wifi_hotspot(View v){
         setWifiHotSpotEnabled(true);    //创建热点
     }
-    private final BroadcastReceiver WifiReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver CommonReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-           if(!am.isConnected)
-                am.addNetwork(am.CreateWifiInfo(SSID,PASS,3));
+            if(intent.getAction().equals("android.media.VOLUME_CHANGED_ACTION")) {
+                AudioManager audioManager = (AudioManager) getApplicationContext().getSystemService(AUDIO_SERVICE);
+                int streamVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+                int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                Log.i("设备最大音量",maxVolume+", "+"设备当前音量:"+streamVolume);
+                Log.i("当前设备音量百分比",(float) (1/2.0)+"");
+                ConnectThread connectThread = new ConnectThread(listenerThread.getSocket(), mHandler);
+                connectThread.setHasPermission(true);
+                connectThread.setMsg(((float) streamVolume/maxVolume)+"");
+                mExecutor.execute(connectThread);
+            }
         }
     };
     // wifi热点开关
@@ -158,6 +179,7 @@ public class MainActivity extends AppCompatActivity {
                 Method configMethod = am.mWifiManager.getClass().getMethod("setWifiApConfiguration", WifiConfiguration.class);
                 boolean isConfigured = (Boolean) configMethod.invoke(am.mWifiManager, config);
                 Method method = am.mWifiManager.getClass().getMethod("startSoftAp", WifiConfiguration.class);
+                //返回热点打开状态
                 return (Boolean) method.invoke(am.mWifiManager,enabled);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -184,13 +206,7 @@ public class MainActivity extends AppCompatActivity {
     }
     @RequiresApi(api = Build.VERSION_CODES.M)
     public void onStartAudioSend(View v) {
-        if(hasPermission) {
-            btn_receveA.setEnabled(false);
-            listenerThread = new ListenerThread(PORT, mHandler);
-            mExecutor.execute(listenerThread);
-            String routeIp = getWifiApIpAddress();
-            Toast.makeText(this, "本地路由IP: " + routeIp, Toast.LENGTH_SHORT).show();
-        }
+
     }
     public void SendToServer(View v){
        // wifiApConnectReceiver = new WifiApConnectReceiver();
@@ -249,38 +265,6 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    public class WifiApConnectReceiver extends BroadcastReceiver{
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if(intent.getAction().equals(ConnectivityManager.CONNECTIVITY_ACTION)){
-                    WifiInfo wifiInfo = am.mWifiManager.getConnectionInfo();
-                    if(wifiInfo != null) {
-                        DhcpInfo dhcpInfo = am.mWifiManager.getDhcpInfo();
-                        Toast.makeText(context, "wifi已连接到热点SSID: " + intToIp(dhcpInfo.ipAddress), Toast.LENGTH_SHORT).show();
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                Socket socket = null;
-                                try {
-                                    socket = new Socket(intToIp(dhcpInfo.ipAddress), PORT);
-                                    Log.d("IP OF SSID: ",intToIp(dhcpInfo.ipAddress));
-                                    if (socket != null) {
-                                        ConnectThread connectThread = new ConnectThread(socket, mHandler);
-                                        mExecutor.execute(connectThread);
-                                    }
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                        }).start();
-
-                    }
-
-            }else {
-                Toast.makeText(context, "wifi未连接到热点", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
     private String intToIp(int paramInt)
     {
         return (paramInt & 0xFF) + "." + (0xFF & paramInt >> 8) + "." + (0xFF & paramInt >> 16) + "."
@@ -306,7 +290,7 @@ public class MainActivity extends AppCompatActivity {
                             byte[] buff = new byte[audioRecorder.bufferSizeInBytes];
                             while (true) {
                                 int length = audioRecorder.audioRecord.read(buff, 0, audioRecorder.bufferSizeInBytes);
-                                Log.i("音频录制长度", buff.length + "");
+                                //Log.i("音频录制长度", buff.length + "");
                                 if (length != -1) {
                                     Socket socket =listenerThread.getSocket();
                                     ConnectThread connectThread = new ConnectThread(socket, mHandler);
@@ -327,11 +311,7 @@ public class MainActivity extends AppCompatActivity {
                 case MSG_SENDED:
                   //  Toast.makeText(MainActivity.this, "发送数据 :"+(String) msg.obj, Toast.LENGTH_SHORT).show();
                     break;
-                case MSG_RECEIVED: //接收到音量（字符串）
-                    /*Integer valuePercent = Integer.parseInt((String) msg.obj);
-                    int value = valuePercent * voluimeMax;
-                    if(value > voluimeMax)
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC,value ,0);*/
+                case MSG_RECEIVED:
                     break;
                 case MSG_SENDED_ERROR:
                    // Toast.makeText(MainActivity.this, "发送数据失败", Toast.LENGTH_SHORT).show();
@@ -351,11 +331,23 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-//        if(WifiReceiver != null)
-//            unregisterReceiver(WifiReceiver);
-        if(wifiApConnectReceiver != null)
-            unregisterReceiver(wifiApConnectReceiver);
+        if(mService != null) {
+            Log.i("前台服务","销毁中。。。");
+            stopService(mIntent);
+        }
+        if(CommonReceiver != null)
+            unregisterReceiver(CommonReceiver);
+
     }
 
-
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if(keyCode == KeyEvent.KEYCODE_BACK){
+            Intent intent=new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_HOME);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        }
+        return false;
+    }
 }

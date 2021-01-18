@@ -11,8 +11,6 @@ import java.util.List;
 /**
  * 实现录音
  *
- * @author chenmy0709
- * @version V001R001C01B001
  */
 public class AudioRecorder {
     //音频输入
