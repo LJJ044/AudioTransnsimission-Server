@@ -30,7 +30,8 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        android:onClick="connect_hotspot"/>
+        android:onClick="connect_hotspot"
+        android:visibility="gone"/>
     <Button
         android:id="@+id/btn_open_hotspot"
         android:layout_width="wrap_content"
@@ -39,26 +40,26 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btn_open_wifi"
         app:layout_constraintRight_toRightOf="parent"
-        android:onClick="create_wifi_hotspot"/>
+        android:onClick="create_wifi_hotspot"
+        android:visibility="gone"/>
     <Button
         android:id="@+id/btn_open_data"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="打开移动网络"
+        android:text="播放车机音频"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btn_open_hotspot"
         app:layout_constraintRight_toRightOf="parent"
-        android:onClick="open_mobile_data"/>
+        android:onClick="output_car" />
     <Button
         android:id="@+id/btn_receveA"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="发送音频"
+        android:text="播放平板音频"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/btn_open_data"
         app:layout_constraintRight_toRightOf="parent"
-        android:onClick="onStartAudioSend"
-        android:visibility="gone"/>
+        android:onClick="output_pad" />
     <Button
         android:id="@+id/btn_sendToS"
         android:layout_width="wrap_content"

@@ -7,6 +7,7 @@ import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -23,6 +24,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.os.ResultReceiver;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -35,6 +37,7 @@ import android.widget.Toast;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -48,53 +51,49 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     private WifiAdmin am;
-    private static String Wifi_Scan_Result = "wifi_result_obtained";
-    String SSID = "Device";
-    String PASS = "12345678";
+    String SSID = "haiyou123";
+    String PASS = "12341234";
     private static final int PORT = 7879;
-    private static final int DEVICE_CONNECTING = 1;
-    private static final int DEVICE_CONNECTED = 2;
-    private static final int MSG_RECEIVED = 3;
-    private static final int MSG_SENDED = 4;
-    private static final int MSG_RECEIVED_ERROR = 5;
-    private static final int MSG_SENDED_ERROR = 6;
     public ExecutorService mExecutor;
     private ListenerThread listenerThread;
-    private AudioRecorder audioRecorder;
-    private  AudioManager audioManager;
-    private int voluimeMax;
     private Button btn_receveA;
     private RadioButton rb_exit;
     private boolean isConnected;
     private boolean hasPermission;
-    private MediaTransService mService;
     private Intent mIntent;
+    private boolean isServiceRunning;
     @SuppressLint("WrongViewCast")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        mService = new MediaTransService();
-        mIntent = new Intent(this,MediaTransService.class);
-        mService.start(this,mIntent);
+        getServiceRunning();
+        if(!isServiceRunning){
+            Log.i("MediaTransService","未在运行");
+            mIntent = new Intent(this,MediaTransService.class);
+            MediaTransService mediaTransService = new MediaTransService();
+            mediaTransService.start(this,mIntent);
+        }else {
+            Log.i("MediaTransService","运行中...");
+        }
         hasPermission = requestPermissions();
         am = new WifiAdmin(this);
         rb_exit = (RadioButton) findViewById(R.id.btn_back);
         rb_exit.setButtonDrawable(new StateListDrawable());
         btn_receveA = (Button) this.findViewById(R.id.btn_receveA);
         mExecutor = Executors.newCachedThreadPool();
-        audioManager = (AudioManager) getApplicationContext().getSystemService(AUDIO_SERVICE);
-        voluimeMax = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        Log.i("设备最大音量",voluimeMax+"");
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction("android.media.VOLUME_CHANGED_ACTION");
-        registerReceiver(CommonReceiver,intentFilter);
-        if(hasPermission) {
-            listenerThread = new ListenerThread(PORT, mHandler);
-            mExecutor.execute(listenerThread);
-            String routeIp = getWifiApIpAddress();
-            Toast.makeText(this, "本地路由IP: " + routeIp, Toast.LENGTH_SHORT).show();
+    }
+    private boolean getServiceRunning(){
+        ActivityManager manager = (ActivityManager) getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE);
+
+        for(ActivityManager.RunningServiceInfo serviceInfo : manager.getRunningServices(Integer.MAX_VALUE)){
+            if(!serviceInfo.service.getClassName().equals(getPackageName()+".MediaTransService")){
+                isServiceRunning = false;
+            }else {
+                isServiceRunning = true;
+            }
         }
+        return isServiceRunning;
     }
     private boolean requestPermissions(){
         if(Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
@@ -116,28 +115,20 @@ public class MainActivity extends AppCompatActivity {
         if(!am.isConnected)
         am.addNetwork(am.CreateWifiInfo(SSID,PASS,3));
     }
-    public void open_mobile_data(View v){
-        setMobileDataState(true);
+    public void output_car(View v){
+        Intent intent = new Intent(this,MediaTransService.class);
+        intent.putExtra("cmd","1");
+        startService(intent);
+    }
+    public void output_pad(View v) {
+        Intent intent = new Intent(this,MediaTransService.class);
+        intent.putExtra("cmd","0");
+        startService(intent);
     }
     public void create_wifi_hotspot(View v){
         setWifiHotSpotEnabled(true);    //创建热点
     }
-    private final BroadcastReceiver CommonReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if(intent.getAction().equals("android.media.VOLUME_CHANGED_ACTION")) {
-                AudioManager audioManager = (AudioManager) getApplicationContext().getSystemService(AUDIO_SERVICE);
-                int streamVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                Log.i("设备最大音量",maxVolume+", "+"设备当前音量:"+streamVolume);
-                Log.i("当前设备音量百分比",(float) (1/2.0)+"");
-                ConnectThread connectThread = new ConnectThread(listenerThread.getSocket(), mHandler);
-                connectThread.setHasPermission(true);
-                connectThread.setMsg(((float) streamVolume/maxVolume)+"");
-                mExecutor.execute(connectThread);
-            }
-        }
-    };
+
     // wifi热点开关
     public boolean setWifiHotSpotEnabled(boolean enabled) {
         //热点的配置类
@@ -176,11 +167,21 @@ public class MainActivity extends AppCompatActivity {
                 return false;
             }
             try {
-                Method configMethod = am.mWifiManager.getClass().getMethod("setWifiApConfiguration", WifiConfiguration.class);
-                boolean isConfigured = (Boolean) configMethod.invoke(am.mWifiManager, config);
-                Method method = am.mWifiManager.getClass().getMethod("startSoftAp", WifiConfiguration.class);
+//                ConnectivityManager cm =(ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
+//                cm.startTethering(ConnectivityManager.TETHERING_WIFI,
+//                        true, new OnStartTetheringCallback());
+                setWifiApEnabledForAndroid_O(true);
+               /* Field wField = am.mWifiManager.getClass().getDeclaredField("mService");
+                wField.setAccessible(true);
+                Object iWifiMgr = wField.get(am.mWifiManager);
+                Class iWifiMgrClass = Class.forName(iWifiMgr.getClass().getName());
+                Method configMethod = iWifiMgrClass.getMethod("setWifiApConfiguration", WifiConfiguration.class);
+                configMethod.invoke(iWifiMgr,config);*/
+                //boolean isConfigured = (Boolean) configMethod.invoke(am.mWifiManager, config);
+
+                //Method method = am.mWifiManager.getClass().getMethod("startSoftAp", WifiConfiguration.class);
                 //返回热点打开状态
-                return (Boolean) method.invoke(am.mWifiManager,enabled);
+                //return (Boolean) method.invoke(am.mWifiManager,enabled);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -188,6 +189,27 @@ public class MainActivity extends AppCompatActivity {
 
         }
         return false;
+    }
+    public void setWifiApEnabledForAndroid_O(boolean state){
+        ConnectivityManager connManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+        Field iConnMgrField;
+        try{
+            iConnMgrField = connManager.getClass().getDeclaredField("mService");
+            iConnMgrField.setAccessible(true);
+            Object iConnMgr = iConnMgrField.get(connManager);
+            Class<?> iConnMgrClass = Class.forName(iConnMgr.getClass().getName());
+            //打开热点
+            if(state) {
+                Method startTethering = iConnMgrClass.getMethod("startTethering", int.class, ResultReceiver.class, boolean.class);
+                startTethering.invoke(iConnMgr, 0, null, true);
+            //关闭热点
+            }else {
+                Method startTethering = iConnMgrClass.getMethod("stopTethering",int.class);
+                startTethering.invoke(iConnMgr,0);
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
     }
     /**
      * 打开移动网络
@@ -197,6 +219,7 @@ public class MainActivity extends AppCompatActivity {
         TelephonyManager telephonyManager = (TelephonyManager) this.getSystemService(Context.TELEPHONY_SERVICE);
         try {
             Method setDataEnabled = telephonyManager.getClass().getDeclaredMethod("setDataEnabled",boolean.class);
+            setDataEnabled.setAccessible(true);
             if (null != setDataEnabled) {
                 setDataEnabled.invoke(telephonyManager, enabled);
             }
@@ -204,13 +227,24 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
     }
-    @RequiresApi(api = Build.VERSION_CODES.M)
-    public void onStartAudioSend(View v) {
 
+    public void setMobileData(boolean enabled){
+            ConnectivityManager cm =(ConnectivityManager) getApplicationContext().getSystemService(CONNECTIVITY_SERVICE);
+        try {
+            Class cMr = Class.forName(cm.getClass().getName());
+            Field field = cMr.getDeclaredField("mService");
+            field.setAccessible(true);
+            Object ICMgr = field.get(cm);
+            Class ICMgrClass = Class.forName(ICMgr.getClass().getName());
+            Method setDataEnabled = ICMgrClass.getDeclaredMethod("setMobileDataEnabled",Boolean.TYPE);
+            setDataEnabled.setAccessible(true);
+            setDataEnabled.invoke(ICMgr,enabled);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
+
     public void SendToServer(View v){
-       // wifiApConnectReceiver = new WifiApConnectReceiver();
-       // registerReceiver(wifiApConnectReceiver,new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
         DhcpInfo dhcpInfo = am.mWifiManager.getDhcpInfo();
         Toast.makeText(this, "wifi已连接到热点SSID: " + intToIp(dhcpInfo.serverAddress), Toast.LENGTH_SHORT).show();
         mExecutor.execute(() -> {
@@ -219,7 +253,7 @@ public class MainActivity extends AppCompatActivity {
                 socket = new Socket(intToIp(dhcpInfo.serverAddress), PORT);
                 Log.d("SSID的IP: ",intToIp(dhcpInfo.serverAddress));
                 if (socket != null) {
-                    ConnectThread connectThread = new ConnectThread(socket, mHandler);
+                    ConnectThread connectThread = new ConnectThread(socket,null);
                     mExecutor.execute(connectThread);
                 }
             } catch (IOException e) {
@@ -233,7 +267,7 @@ public class MainActivity extends AppCompatActivity {
          mExecutor.execute(() -> {
              Socket socket = listenerThread.getSocket();
              if (socket != null) {
-                 ConnectThread connectThread = new ConnectThread(socket, mHandler);
+                 ConnectThread connectThread = new ConnectThread(socket, null);
                  connectThread.setHasPermission(true);
                  connectThread.setMsg("你好，客户端");
                  mExecutor.execute(connectThread);
@@ -270,74 +304,22 @@ public class MainActivity extends AppCompatActivity {
         return (paramInt & 0xFF) + "." + (0xFF & paramInt >> 8) + "." + (0xFF & paramInt >> 16) + "."
                 + (0xFF & paramInt >> 24);
     }
-    private Handler mHandler = new Handler(){
-        @Override
-        public void handleMessage(@NonNull Message msg) {
-            super.handleMessage(msg);
-            switch (msg.what){
-                case DEVICE_CONNECTING:
-                    //Toast.makeText(MainActivity.this, "接收到客户端的连接 ："+(String) msg.obj, Toast.LENGTH_SHORT).show();
-                    mExecutor.execute(new ConnectThread(listenerThread.getSocket(),mHandler));
-                    break;
-                case DEVICE_CONNECTED:
-                    if (audioRecorder == null) {
-                        audioRecorder = AudioRecorder.getInstance();
-                        audioRecorder.createDefaultAudio();
-                    }
-                    if (audioRecorder.getStatus() != AudioRecorder.Status.STATUS_START) {
-                        audioRecorder.startRecord();
-                        mExecutor.execute(() -> {
-                            byte[] buff = new byte[audioRecorder.bufferSizeInBytes];
-                            while (true) {
-                                int length = audioRecorder.audioRecord.read(buff, 0, audioRecorder.bufferSizeInBytes);
-                                //Log.i("音频录制长度", buff.length + "");
-                                if (length != -1) {
-                                    Socket socket =listenerThread.getSocket();
-                                    ConnectThread connectThread = new ConnectThread(socket, mHandler);
-                                    connectThread.setHasPermission(true);
-                                    connectThread.setStream(buff);
-                                    mExecutor.execute(connectThread);
-                                } else {
-                                    break;
-                                }
-                            }
-                        });
-                    }
-                    if(!isConnected) {
-                        Toast.makeText(MainActivity.this, "连接成功", Toast.LENGTH_SHORT).show();
-                        isConnected = true;
-                    }
-                    break;
-                case MSG_SENDED:
-                  //  Toast.makeText(MainActivity.this, "发送数据 :"+(String) msg.obj, Toast.LENGTH_SHORT).show();
-                    break;
-                case MSG_RECEIVED:
-                    break;
-                case MSG_SENDED_ERROR:
-                   // Toast.makeText(MainActivity.this, "发送数据失败", Toast.LENGTH_SHORT).show();
-                    break;
-                case MSG_RECEIVED_ERROR:
-                   // Toast.makeText(MainActivity.this, "接收数据失败", Toast.LENGTH_SHORT).show();
-                    break;
-            }
-        }
-    };
     public void exit(View v){
-        finish();
-        android.os.Process.killProcess(android.os.Process.myPid());
+            Intent intent = new Intent(Intent.ACTION_MAIN);
+            intent.addCategory(Intent.CATEGORY_HOME);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+
     }
 
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if(mService != null) {
+      /*  if(mService != null) {
             Log.i("前台服务","销毁中。。。");
             stopService(mIntent);
-        }
-        if(CommonReceiver != null)
-            unregisterReceiver(CommonReceiver);
-
+        }*/
     }
 
     @Override

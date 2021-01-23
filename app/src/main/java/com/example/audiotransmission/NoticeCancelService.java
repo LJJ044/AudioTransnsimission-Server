@@ -26,11 +26,14 @@ public class NoticeCancelService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         NotificationManager nm = (NotificationManager) this.getApplicationContext().getSystemService(NOTIFICATION_SERVICE);
-        NotificationChannel channel = new NotificationChannel(NITIFICATION_CHANEL_ID, getString(R.string.app_name), NotificationManager.IMPORTANCE_LOW);
-        channel.setSound(null, null);
-        nm.createNotificationChannel(channel);
-        Notification nb = new Notification.Builder(this).setChannelId(NITIFICATION_CHANEL_ID).build();
-        startForeground(MediaTransService.NOTIFICATION_ID,nb);
+        Notification.Builder nb = new Notification.Builder(this);
+        if(Build.VERSION.SDK_INT >= 26){
+            NotificationChannel channel = new NotificationChannel(NITIFICATION_CHANEL_ID, getString(R.string.app_name), NotificationManager.IMPORTANCE_LOW);
+            channel.setSound(null, null);
+            nm.createNotificationChannel(channel);
+            nb.setChannelId(NITIFICATION_CHANEL_ID);
+        }
+        startForeground(MediaTransService.NOTIFICATION_ID,nb.build());
         new Thread(() -> {
             SystemClock.sleep(1000);
             stopForeground(true);

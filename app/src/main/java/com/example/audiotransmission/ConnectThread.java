@@ -27,6 +27,7 @@ public class ConnectThread implements Runnable{
     private PrintWriter pw;
     private Gson gson;
     private byte[] stream;
+    private String msg;
     private boolean hasPermission;
     private static final int DEVICE_CONNECTED = 2;
     private static final int MSG_RECEIVED = 3;
@@ -57,7 +58,6 @@ public class ConnectThread implements Runnable{
         this.msg = msg;
     }
 
-    private String msg;
     public ConnectThread(Socket socket, Handler mHandler) {
         this.socket = socket;
         this.mHandler = mHandler;
