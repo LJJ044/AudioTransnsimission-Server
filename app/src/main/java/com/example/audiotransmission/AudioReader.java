@@ -25,13 +25,15 @@ public class AudioReader {
     //播放对象
     public AudioTrack audioTrack;
 
+    private static class AudioReaderHoler{
+        private static AudioReader audioReader = new AudioReader();
+    }
     private AudioReader() {
     }
+
     public static AudioReader getInstance(){
-        if(audioReader == null){
-            audioReader = new AudioReader();
-        }
-        return audioReader;
+
+        return AudioReaderHoler.audioReader;
     }
     public void createDefaultAudio() {
         // 获得缓冲区字节大小
