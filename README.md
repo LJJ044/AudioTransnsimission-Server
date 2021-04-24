@@ -1,2 +1,2 @@
 # AudioTransnsimission
-#The server that transmit the audio through WifiHotSpot
+#An example for the server that transmit the audio through WifiHotSpot
