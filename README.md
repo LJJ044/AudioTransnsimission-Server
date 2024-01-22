@@ -1,2 +1,2 @@
-# AudioTransnsimission
-  An example for the server that transmit the audiobyte(also including string) through WifiHotSpot connection(Tcp,socket)
+# AudioTransnsimission (Android Mobile)
+  A Demo for the server that transmits the audiobyte(also including string) through WifiHotSpot connection between two mobile devices(Tcp,socket)
